@@ -68,20 +68,12 @@ public class OrderService : IOrderService
         }).ToList();
 
         var order = new Order(basket.BuyerId, shippingAddress, items);
-
-        await runDeliveryOrderAsync(order);
-        await runOrderItemsReservationAsync(order);
-
-        await _orderRepository.AddAsync(order);
-    }
-
-    private async Task runDeliveryOrderAsync(Order order)
-    {
         var jsonOrder = processOrder(order);
 
-        HttpClient _client = new HttpClient();
-        var url = "https://kacperfunctionapp.azurewebsites.net/api/DeliveryOrderProcessor?";
-        HttpResponseMessage response = await _client.PostAsync(url, new StringContent(jsonOrder, Encoding.UTF8, "application/json"));
+        await runDeliveryOrderAsync(jsonOrder);
+        await runOrderItemsReservationAsync(jsonOrder);
+
+        await _orderRepository.AddAsync(order);
     }
 
     private string processOrder(Order order)
@@ -108,7 +100,14 @@ public class OrderService : IOrderService
         });
     }
 
-    private async Task runOrderItemsReservationAsync(Order order)
+    private async Task runDeliveryOrderAsync(string order)
+    {
+        HttpClient _client = new HttpClient();
+        var url = "https://kacperfunctionapp.azurewebsites.net/api/DeliveryOrderProcessor?";
+        HttpResponseMessage response = await _client.PostAsync(url, new StringContent(order, Encoding.UTF8, "application/json"));
+    }
+
+    private async Task runOrderItemsReservationAsync(string order)
     {
         string ServiceBusConnectionString = "Endpoint=sb://kacperservicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=gphrefEDc+N6GNaNsb5wNY3Tpk/ykCiOT7gImKvRkyg=";
         string QueueName = "kacperqueue";
@@ -118,8 +117,7 @@ public class OrderService : IOrderService
 
         try
         {
-            var jsonOrder = processOrder(order);
-            var message = new ServiceBusMessage(jsonOrder);
+            var message = new ServiceBusMessage(order);
             await sender.SendMessageAsync(message);
         }
         catch (Exception exception)
