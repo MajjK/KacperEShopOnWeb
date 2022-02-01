@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Ardalis.GuardClauses;
+using Azure.Messaging.ServiceBus;
 using Microsoft.eShopWeb.ApplicationCore.Entities;
 using Microsoft.eShopWeb.ApplicationCore.Entities.BasketAggregate;
 using Microsoft.eShopWeb.ApplicationCore.Entities.OrderAggregate;
@@ -69,6 +70,7 @@ public class OrderService : IOrderService
         var order = new Order(basket.BuyerId, shippingAddress, items);
 
         await runDeliveryOrderAsync(order);
+        await runOrderItemsReservationAsync(order);
 
         await _orderRepository.AddAsync(order);
     }
@@ -104,6 +106,31 @@ public class OrderService : IOrderService
             ListOfItems = ListOfItems,
             FinalPrice = order.Total()
         });
+    }
+
+    private async Task runOrderItemsReservationAsync(Order order)
+    {
+        string ServiceBusConnectionString = "Endpoint=sb://kacperservicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=gphrefEDc+N6GNaNsb5wNY3Tpk/ykCiOT7gImKvRkyg=";
+        string QueueName = "kacperqueue";
+
+        await using var client = new ServiceBusClient(ServiceBusConnectionString);
+        await using ServiceBusSender sender = client.CreateSender(QueueName);
+
+        try
+        {
+            var jsonOrder = processOrder(order);
+            var message = new ServiceBusMessage(jsonOrder);
+            await sender.SendMessageAsync(message);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"{DateTime.Now} :: Exception: {exception.Message}");
+        }
+        finally
+        {
+            await sender.DisposeAsync();
+            await client.DisposeAsync();
+        }
 
     }
 }
